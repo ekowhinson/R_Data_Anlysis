@@ -1,0 +1,354 @@
+---
+title: "Case Study for Google Data Analytics Cyclistic"
+author: "Francis"
+date: "07/06/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+# An analysis of the usage patterns of Casual users compared to Members of cyclistic bikes
+
+In order to do this analysis, I used data available here [link](https://divvy-tripdata.s3.amazonaws.com/index.html)
+
+This publicy available data was downloaded and stored as local files in a local folder on my pc.
+The data is saved in quaters, and each quarter is a single csv file.  The last four quarters from Q2-2019 to q1-2020 was considered for the analysis since that made up the most recent full year (12 months) of data available.
+```{r libraries used for the analysis}
+#install.packages("lubridate")
+#install.packages("ggplot2")
+#install.packages("tidyverse")
+```
+```{r loading libraries}
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+```
+```{r loading files}
+getwd()
+setwd("C:/Users/ekowh/OneDrive/Desktop/Documents/R School") 
+
+rider_q1_20 <- read_csv("Divvy_Trips_2020_Q1.csv")
+rider_q2_19 <- read_csv("Divvy_Trips_2019_Q2")
+rider_q3_19 <- read_csv("Divvy_Trips_2019_Q3.csv")
+rider_q4_19 <- read_csv("Divvy_Trips_2019_Q4.csv")
+
+```
+## inspecting the contents of each dataframe in order to match all fields and maintain a single name for all matching columns in each dataframe
+
+```{r inspecting df 1}
+head(rider_q1_20)
+```
+
+```{r inspecting df 2}
+head(rider_q2_19)
+```
+```{r inspecting df 3}
+head(rider_q3_19)
+```
+
+```{r inspecting df 4}
+head(rider_q3_19)
+```
+
+```{r matching and renaming fields}
+q1_2020<- rider_q1_20
+
+q4_2019 <- rename(rider_q4_19
+                  ,ride_id = trip_id
+                  ,rideable_type = bikeid 
+                  ,started_at = start_time  
+                  ,ended_at = end_time  
+                  ,start_station_name = from_station_name 
+                  ,start_station_id = from_station_id 
+                  ,end_station_name = to_station_name 
+                  ,end_station_id = to_station_id 
+                  ,member_casual = usertype)
+
+
+q3_2019 <- rename(rider_q3_19
+                  ,ride_id = trip_id
+                  ,rideable_type = bikeid 
+                  ,started_at = start_time  
+                  ,ended_at = end_time  
+                  ,start_station_name = from_station_name 
+                  ,start_station_id = from_station_id 
+                  ,end_station_name = to_station_name 
+                  ,end_station_id = to_station_id 
+                  ,member_casual = usertype)
+
+q2_2019 <- rename(rider_q2_19
+                  ,ride_id = "01 - Rental Details Rental ID"
+                  ,rideable_type = "01 - Rental Details Bike ID" 
+                  ,started_at = "01 - Rental Details Local Start Time"  
+                  ,ended_at = "01 - Rental Details Local End Time"  
+                  ,start_station_name = "03 - Rental Start Station Name" 
+                  ,start_station_id = "03 - Rental Start Station ID"
+                  ,end_station_name = "02 - Rental End Station Name" 
+                  ,end_station_id = "02 - Rental End Station ID"
+                  ,member_casual = "User Type")
+```
+
+
+## Inspecting the matched dataframes 
+```{r inspecting the dataframes}
+str(q1_2020)
+str(q4_2019)
+str(q3_2019)
+str(q2_2019)
+```
+## Converting ride_id and rideable_type to chr
+
+```{r convert columns to chr}
+q4_2019 <-  mutate(q4_2019, ride_id = as.character(ride_id)
+                   ,rideable_type = as.character(rideable_type))
+q3_2019 <-  mutate(q3_2019, ride_id = as.character(ride_id)
+                   ,rideable_type = as.character(rideable_type)) 
+q2_2019 <-  mutate(q2_2019, ride_id = as.character(ride_id)
+                   ,rideable_type = as.character(rideable_type)) 
+```
+
+## Combining all separate dataframes into 1 big dataframe
+
+```{r combine into 1 dataframe}
+all_trips <- bind_rows(q2_2019, q3_2019, q4_2019, q1_2020)
+```
+## Some columns were no more used in 2020 first quarter and these columns therefore have become inconsistent with the rest of the combined data and must be removed.
+
+```{r removing inconsistent columns}
+all_trips <- all_trips %>%  
+  select(-c(start_lat, start_lng, end_lat, end_lng, birthyear, gender, "01 - Rental Details Duration In Seconds Uncapped", "05 - Member Details Member Birthday Year", "Member Gender", "tripduration"))
+```
+
+## Inspecting the new dataframe
+
+```{r column names}
+colnames(all_trips)
+```
+
+
+```{r number of rows}
+nrow(all_trips)
+```
+
+```{r dim}
+dim(all_trips)
+```
+
+```{r head}
+head(all_trips)
+```
+
+```{r tail}
+tail(all_trips)
+```
+
+```{r str}
+str(all_trips)
+```
+
+```{r Summary}
+summary(all_trips)
+```
+
+## In the head results we see that the member_casual field contains subscriber, and in the tail it contains member or casual, we need to inspect this column further.
+
+```{r inspect member_casual column}
+table(all_trips$member_casual)
+```
+## We notice that we have two values for casual i.e. subscriber/casual and two values for member i.e. Customer/member but all these only describe either a member or a casual customer, this column must therefore be updated to only contain member or casual.
+
+```{r updating member_casual column}
+all_trips <-  all_trips %>% 
+  mutate(member_casual = recode(member_casual,"Subscriber" = "member","Customer" = "casual"))
+
+```
+
+```{r inspecting columns after update}
+table(all_trips$member_casual)
+```
+
+## Breaking the date down into day, month, year and week for analysis
+
+```{r}
+all_trips$date <- as.Date(all_trips$started_at)
+all_trips$month <- format(as.Date(all_trips$date), "%m")
+all_trips$day <- format(as.Date(all_trips$date), "%d")
+all_trips$year <- format(as.Date(all_trips$date), "%Y")
+all_trips$day_of_week <- format(as.Date(all_trips$date), "%A")
+```
+
+## The most recent data, 2020 firts quarter did not have a ride duration column, therefore a ride duration must be calculated on across the entire dataframe for uniformity.
+
+```{r}
+all_trips$ride_length <- difftime(all_trips$ended_at,all_trips$started_at)
+```
+
+##Inspecting the dataframe
+
+```{r}
+str(all_trips)
+```
+
+## Converting ride_length to numeric for analysis
+```{r}
+all_trips$ride_length <- as.numeric(as.character(all_trips$ride_length))
+is.numeric(all_trips$ride_length)
+```
+## Viewing a summary of the ride_length just created
+```{r}
+summary(all_trips$ride_length)
+```
+Looks like there are certain rides with a negative length, this is an abnormality(bad data) and needs to be removed from the data in order to have objective analysis.
+
+```{r}
+all_trips_v2 <- all_trips[!(all_trips$start_station_name == "HQ QR" | all_trips$ride_length<0),]
+summary(all_trips_v2$ride_length)
+```
+
+## Comparing members and casual trips
+
+```{r average ride_length}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = mean)
+```
+```{r median}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = median)
+```
+
+
+```{r max}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = max)
+```
+
+```{r min}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = min)
+```
+
+## Ride time by day of week between members and casual
+
+```{r}
+all_trips_v2$day_of_week <- ordered(all_trips_v2$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+```
+
+## Average ride by month member_casual
+```{r}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$month, FUN = mean)
+```
+
+## Average ride by Year member_casual
+```{r}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$year, FUN = mean)
+```
+
+##Anaylsing data by weekday and member_casual
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>%  
+  group_by(member_casual, weekday) %>%  
+  summarise(number_of_rides = n()							 
+            ,average_duration = mean(ride_length)) %>% 		
+  arrange(member_casual, weekday)	
+```
+##Anaylsing data by Month and member_casual
+```{r}
+all_trips_v2 %>% 
+  mutate(months = month(started_at, label = TRUE)) %>%  
+  group_by(member_casual, months) %>%  
+  summarise(number_of_rides = n()							 
+            ,average_duration = mean(ride_length)) %>% 		
+  arrange(member_casual, months)	
+```
+## Analysing data by year and member_casual
+```{r}
+all_trips_v2 %>% 
+  mutate(r_year = year(started_at)) %>%  
+  group_by(member_casual, r_year) %>%  
+  summarise(number_of_rides = n()							 
+            ,average_duration = mean(ride_length)) %>% 		
+  arrange(member_casual, r_year)	
+```
+
+## Visualising Data, number of rides taken analysed by member_casual, weekday
+
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")+
+labs(title="Number of Rides Taken",subtitle = "Analysed by Weekdays and Customer Type")
+```
+## Visualising Data, number of rides taken analysed by member_casual, month
+```{r}
+all_trips_v2 %>% 
+  mutate(months = month(started_at, label = TRUE)) %>% 
+  group_by(member_casual, months) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, months)  %>% 
+  ggplot(aes(x = months, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title="Number of Rides Taken",subtitle = "Analysed by Month and Customer Type")
+```
+## Visualising Data, number of rides taken analysed by member_casual, year
+
+```{r}
+all_trips_v2 %>% 
+  mutate(year = year(started_at)) %>% 
+  group_by(member_casual, year) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, year)  %>% 
+  ggplot(aes(x = year, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title="Number of Rides Taken",subtitle = "Analysed by Year and Customer Type")
+```
+## Visualising Data, average duration of rides analysed by member_casual, weekday
+
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title="Average Duration of Rides",subtitle = "Analysed by Weekdays and Customer Type")
+
+```
+
+## Visualising Data, average duration of rides analysed by member_casual, month
+
+```{r}
+all_trips_v2 %>% 
+  mutate(month = month(started_at, label = TRUE)) %>% 
+  group_by(member_casual, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, month)  %>% 
+  ggplot(aes(x = month, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title="Average Duration of Rides",subtitle = "Analysed by Month and Customer Type")
+
+```
+
+
+
+## Visualising Data, average duration of rides analysed by member_casual, year
+
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = year(started_at)) %>% 
+  group_by(member_casual, year) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, year)  %>% 
+  ggplot(aes(x = year, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title="Average Duration of Rides",subtitle = "Analysed by Year and Customer Type")
+
+```
